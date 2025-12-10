@@ -27,11 +27,11 @@ export class Player {
 
         // Physics
         // Mass 80kg, Friction 0 (to avoid sticking to walls), Restitution 0 (no bounce)
-        this.aggregate = new PhysicsAggregate(playerMesh, PhysicsShapeType.CAPSULE, { mass: 80, friction: 0, restitution: 0 }, scene);
+        this.aggregate = new PhysicsAggregate(playerMesh, PhysicsShapeType.CAPSULE, { mass: 80, friction: 0.6, restitution: 0 }, scene);
         this.aggregate.body.setMassProperties({
             inertia: new Vector3(0, 0, 0) // Lock rotation so player doesn't tip over
         });
-        this.aggregate.body.setLinearDamping(0.18);
+        this.aggregate.body.setLinearDamping(0.3);
         this.aggregate.body.setAngularDamping(1);
 
         // Camera
@@ -165,9 +165,14 @@ export class Player {
             newVel.y = this.jumpStrength;
         }
 
-        // If grounded and tiny upward velocity, cancel micro-bounce
+        // Clamp micro-bounce when grounded
         if (grounded && newVel.y > 0 && !this.inputMap[" "]) {
             newVel.y = 0;
+        }
+
+        // Add slight downforce to keep contact
+        if (grounded && newVel.y <= 0.5) {
+            newVel.y = Math.min(newVel.y, -1);
         }
 
         this.aggregate.body.setLinearVelocity(newVel);

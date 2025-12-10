@@ -14,7 +14,6 @@ import {
   Color3,
   VertexData,
   VertexBuffer,
-  CubeTexture,
 } from "@babylonjs/core";
 import HavokPhysics from "@babylonjs/havok";
 import havokWasmUrl from "../node_modules/@babylonjs/havok/lib/esm/HavokPhysics.wasm?url";
@@ -48,8 +47,6 @@ async function createScene(engine: Engine | WebGPUEngine) {
   const light = new HemisphericLight("light", new Vector3(0, 1, 0), scene);
   light.intensity = 0.7;
 
-  addSky(scene);
-
   createTerrain(scene);
   scatterProps(scene, interaction);
   createHotbar(scene, player);
@@ -67,39 +64,39 @@ function noise2D(x: number, z: number, seed = 1337) {
 function fbm(x: number, z: number) {
   let total = 0;
   let amplitude = 1;
-  let frequency = 0.06;
-  for (let i = 0; i < 5; i++) {
+  let frequency = 0.03;
+  for (let i = 0; i < 6; i++) {
     total += noise2D(x * frequency, z * frequency) * amplitude;
-    amplitude *= 0.5;
-    frequency *= 2;
+    amplitude *= 0.48;
+    frequency *= 1.9;
   }
   return total;
 }
 
 function createTerrain(scene: Scene) {
-  const size = 200;
-  const subdivisions = 120;
+  const size = 320;
+  const subdivisions = 180;
   const ground = MeshBuilder.CreateGround("ground", { width: size, height: size, subdivisions }, scene);
 
   const positions = ground.getVerticesData("position")!;
   for (let i = 0; i < positions.length; i += 3) {
     const x = positions[i];
     const z = positions[i + 2];
-    const h = fbm(x, z) * 8 - 3;
+    const h = fbm(x, z) * 14 - 5; // rolling hills
     positions[i + 1] = h;
   }
   ground.updateVerticesData(VertexBuffer.PositionKind, positions);
   VertexData.ComputeNormals(positions, ground.getIndices()!, ground.getVerticesData(VertexBuffer.NormalKind)!);
 
   const grassTex = new Texture("https://assets.babylonjs.com/environments/grass.jpg", scene);
-  grassTex.uScale = grassTex.vScale = 6;
+  grassTex.uScale = grassTex.vScale = 8;
   const groundMat = new StandardMaterial("groundMat", scene);
   groundMat.diffuseTexture = grassTex;
   groundMat.specularColor = Color3.Black();
-  groundMat.emissiveColor = new Color3(0.02, 0.05, 0.02);
+  groundMat.emissiveColor = new Color3(0.015, 0.04, 0.015);
   ground.material = groundMat;
 
-  new PhysicsAggregate(ground, PhysicsShapeType.MESH, { mass: 0, restitution: 0.02, friction: 0.9 }, scene);
+  new PhysicsAggregate(ground, PhysicsShapeType.MESH, { mass: 0, restitution: 0.0, friction: 1.0 }, scene);
 }
 
 function scatterProps(scene: Scene, interaction: InteractionSystem) {
@@ -112,6 +109,7 @@ function scatterProps(scene: Scene, interaction: InteractionSystem) {
   leafMat.specularColor = new Color3(0.02, 0.05, 0.02);
   leafMat.emissiveColor = new Color3(0.02, 0.05, 0.02);
   leafMat.alpha = 0.95;
+  leafMat.diffuseTexture = new Texture("https://assets.babylonjs.com/environments/leaf.jpg", scene);
 
   const rockMat = new StandardMaterial("rockMat", scene);
   rockMat.diffuseTexture = new Texture("https://assets.babylonjs.com/environments/rock.jpg", scene);
@@ -149,17 +147,7 @@ function scatterProps(scene: Scene, interaction: InteractionSystem) {
   }
 }
 
-function addSky(scene: Scene) {
-  const skybox = MeshBuilder.CreateBox("skyBox", { size: 1000 }, scene);
-  const skyMaterial = new StandardMaterial("skyMat", scene);
-  skyMaterial.backFaceCulling = false;
-  skyMaterial.disableLighting = true;
-  skyMaterial.reflectionTexture = new CubeTexture("https://assets.babylonjs.com/environments/environmentSpecular.env", scene);
-  skyMaterial.reflectionTexture.coordinatesMode = 5;
-  skyMaterial.diffuseColor = Color3.Black();
-  skyMaterial.specularColor = Color3.Black();
-  skybox.material = skyMaterial;
-}
+// Skybox removed per request
 
 // --- UI ---
 function createHotbar(scene: Scene, player: Player) {
