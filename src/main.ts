@@ -14,11 +14,13 @@ import {
   Color3,
   VertexData,
   VertexBuffer,
+  CubeTexture,
 } from "@babylonjs/core";
 import HavokPhysics from "@babylonjs/havok";
 import havokWasmUrl from "../node_modules/@babylonjs/havok/lib/esm/HavokPhysics.wasm?url";
 import { AdvancedDynamicTexture, StackPanel, Rectangle, TextBlock } from "@babylonjs/gui";
 import { Player } from "./player";
+import { Slider } from "@babylonjs/gui";
 
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 
@@ -44,9 +46,12 @@ async function createScene(engine: Engine | WebGPUEngine) {
   const light = new HemisphericLight("light", new Vector3(0, 1, 0), scene);
   light.intensity = 0.7;
 
+  addSky(scene);
+
   createTerrain(scene);
   scatterProps(scene);
   createHotbar(scene, player);
+  createSettings(scene, player);
 
   return scene;
 }
@@ -89,6 +94,7 @@ function createTerrain(scene: Scene) {
   const groundMat = new StandardMaterial("groundMat", scene);
   groundMat.diffuseTexture = grassTex;
   groundMat.specularColor = Color3.Black();
+  groundMat.emissiveColor = new Color3(0.02, 0.05, 0.02);
   ground.material = groundMat;
 
   new PhysicsAggregate(ground, PhysicsShapeType.MESH, { mass: 0, restitution: 0.1, friction: 0.8 }, scene);
@@ -100,12 +106,17 @@ function scatterProps(scene: Scene) {
   treeMat.specularColor = Color3.Black();
 
   const leafMat = new StandardMaterial("leafMat", scene);
-  leafMat.diffuseColor = new Color3(0.2, 0.5, 0.2);
-  leafMat.specularColor = Color3.Black();
+  leafMat.diffuseColor = new Color3(0.2, 0.55, 0.25);
+  leafMat.specularColor = new Color3(0.02, 0.05, 0.02);
+  leafMat.emissiveColor = new Color3(0.02, 0.05, 0.02);
 
   const rockMat = new StandardMaterial("rockMat", scene);
   rockMat.diffuseTexture = new Texture("https://assets.babylonjs.com/environments/rock.jpg", scene);
-  rockMat.specularColor = Color3.Black();
+  rockMat.specularColor = new Color3(0.1, 0.1, 0.1);
+  rockMat.emissiveColor = new Color3(0.01, 0.01, 0.01);
+  rockMat.useParallax = true;
+  rockMat.useParallaxOcclusion = true;
+  rockMat.parallaxScaleBias = 0.02;
 
   for (let i = 0; i < 50; i++) {
     const tree = MeshBuilder.CreateCylinder("tree" + i, { height: 5, diameter: 0.8 }, scene);
@@ -130,6 +141,18 @@ function scatterProps(scene: Scene) {
     rock.material = rockMat;
     new PhysicsAggregate(rock, PhysicsShapeType.MESH, { mass: 0 }, scene);
   }
+}
+
+function addSky(scene: Scene) {
+  const skybox = MeshBuilder.CreateBox("skyBox", { size: 1000 }, scene);
+  const skyMaterial = new StandardMaterial("skyMat", scene);
+  skyMaterial.backFaceCulling = false;
+  skyMaterial.disableLighting = true;
+  skyMaterial.reflectionTexture = new CubeTexture("https://assets.babylonjs.com/environments/environmentSpecular.env", scene);
+  skyMaterial.reflectionTexture.coordinatesMode = 5;
+  skyMaterial.diffuseColor = Color3.Black();
+  skyMaterial.specularColor = Color3.Black();
+  skybox.material = skyMaterial;
 }
 
 // --- UI ---
@@ -176,6 +199,73 @@ function createHotbar(scene: Scene, player: Player) {
 
   updateHighlight(0);
   player.onToolChanged((index) => updateHighlight(index));
+}
+
+function createSettings(scene: Scene, player: Player) {
+  const ui = AdvancedDynamicTexture.CreateFullscreenUI("SettingsUI", true, scene);
+
+  const panel = new StackPanel();
+  panel.width = "320px";
+  panel.isVertical = true;
+  panel.spacing = 8;
+  panel.horizontalAlignment = StackPanel.HORIZONTAL_ALIGNMENT_RIGHT;
+  panel.verticalAlignment = StackPanel.VERTICAL_ALIGNMENT_TOP;
+  panel.paddingTop = "12px";
+  panel.paddingRight = "12px";
+  panel.background = "rgba(0,0,0,0.35)";
+  panel.isVisible = false;
+  ui.addControl(panel);
+
+  const title = new TextBlock();
+  title.text = "Settings";
+  title.color = "white";
+  title.fontSize = 18;
+  title.height = "28px";
+  panel.addControl(title);
+
+  const addSlider = (labelText: string, min: number, max: number, value: number, onChange: (v: number) => void) => {
+    const label = new TextBlock();
+    label.text = `${labelText}: ${value.toFixed(1)}`;
+    label.color = "white";
+    label.height = "24px";
+    panel.addControl(label);
+
+    const slider = new Slider();
+    slider.minimum = min;
+    slider.maximum = max;
+    slider.value = value;
+    slider.height = "14px";
+    slider.color = "#ffd54f";
+    slider.background = "#555";
+    slider.borderColor = "#222";
+    slider.onValueChangedObservable.add((v) => {
+      label.text = `${labelText}: ${v.toFixed(1)}`;
+      onChange(v);
+    });
+    panel.addControl(slider);
+  };
+
+  addSlider("Mouse Sens", 400, 2000, 1200, (v) => player.setMouseSensitivity(v));
+  addSlider("FOV", 0.8, 1.4, player.camera.fov, (v) => player.setFov(v));
+
+  let moveSpeed = 12;
+  let dampingVal = 8;
+  addSlider("Move Speed", 6, 18, moveSpeed, (v) => {
+    moveSpeed = v;
+    player.setMovementSettings(moveSpeed, 1.5, dampingVal);
+  });
+  addSlider("Damping", 2, 14, dampingVal, (v) => {
+    dampingVal = v;
+    player.setMovementSettings(moveSpeed, 1.5, dampingVal);
+  });
+  addSlider("Jump", 4, 9, 6.5, (v) => player.setJumpStrength(v));
+
+  // Toggle visibility with "O"
+  scene.onKeyboardObservable.add((kbInfo) => {
+    if (kbInfo.event.key.toLowerCase() === "o" && kbInfo.type === 1) {
+      panel.isVisible = !panel.isVisible;
+    }
+  });
 }
 
 async function init() {

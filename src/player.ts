@@ -1,4 +1,4 @@
-import { Scene, Vector3, MeshBuilder, PhysicsAggregate, PhysicsShapeType, UniversalCamera, TransformNode, ActionManager, ExecuteCodeAction } from "@babylonjs/core";
+import { Scene, Vector3, MeshBuilder, PhysicsAggregate, PhysicsShapeType, UniversalCamera, TransformNode, ActionManager, ExecuteCodeAction, Ray } from "@babylonjs/core";
 import { Tool, Sword, Crossbow, Axe, Pickaxe } from "./tools";
 
 export class Player {
@@ -8,12 +8,14 @@ export class Player {
     private inputMap: Record<string, boolean> = {};
     private baseSpeed = 12;
     private sprintMultiplier = 1.5;
-    private acceleration = 35;
-    private damping = 6;
+    private acceleration = 40;
+    private damping = 8;
+    private jumpStrength = 6.5;
 
     private tools: Tool[] = [];
     private currentToolIndex: number = 0;
     private toolChanged?: (index: number, tool: Tool) => void;
+    private mouseInput: any;
 
     constructor(scene: Scene, canvas: HTMLCanvasElement) {
         // Player Mesh (Capsule)
@@ -28,14 +30,16 @@ export class Player {
         this.aggregate.body.setMassProperties({
             inertia: new Vector3(0, 0, 0) // Lock rotation so player doesn't tip over
         });
+        this.aggregate.body.setLinearDamping(0.18);
+        this.aggregate.body.setAngularDamping(1);
 
         // Camera
         this.camera = new UniversalCamera("playerCamera", new Vector3(0, 0.8, 0), scene);
         this.camera.parent = playerMesh;
         this.camera.attachControl(canvas, true);
         this.camera.minZ = 0.1;
-        const mouseInput = this.camera.inputs.attached["mouse"] as any;
-        if (mouseInput) mouseInput.angularSensibility = 1200; // snappier look
+        this.mouseInput = this.camera.inputs.attached["mouse"] as any;
+        if (this.mouseInput) this.mouseInput.angularSensibility = 1200; // snappier look
 
         // Remove default keyboard controls as we'll handle physics movement
         this.camera.inputs.removeByType("FreeCameraKeyboardMoveInput");
@@ -78,6 +82,24 @@ export class Player {
         scene.onBeforeRenderObservable.add(() => {
             this.update();
         });
+    }
+
+    public setMouseSensitivity(value: number) {
+        if (this.mouseInput) this.mouseInput.angularSensibility = value;
+    }
+
+    public setFov(value: number) {
+        this.camera.fov = value;
+    }
+
+    public setMovementSettings(baseSpeed: number, sprintMultiplier: number, damping: number) {
+        this.baseSpeed = baseSpeed;
+        this.sprintMultiplier = sprintMultiplier;
+        this.damping = damping;
+    }
+
+    public setJumpStrength(value: number) {
+        this.jumpStrength = value;
     }
 
     public onToolChanged(cb: (index: number, tool: Tool) => void) {
@@ -135,11 +157,25 @@ export class Player {
             newVel.z *= damp;
         }
 
+        const grounded = this.isGrounded();
+
         // Simple Jump
-        if (this.inputMap[" "] && Math.abs(currentVel.y) < 0.2) {
-            newVel.y = 6.5;
+        if (this.inputMap[" "] && grounded && Math.abs(currentVel.y) < 0.4) {
+            newVel.y = this.jumpStrength;
+        }
+
+        // If grounded and tiny upward velocity, cancel micro-bounce
+        if (grounded && newVel.y > 0 && !this.inputMap[" "]) {
+            newVel.y = 0;
         }
 
         this.aggregate.body.setLinearVelocity(newVel);
+    }
+
+    private isGrounded(): boolean {
+        const origin = this.mesh.getAbsolutePosition().clone();
+        const ray = new Ray(origin, new Vector3(0, -1, 0), 1.2);
+        const hit = this.mesh.getScene().pickWithRay(ray, (m) => m.name.startsWith("ground"));
+        return !!(hit && hit.hit && hit.distance <= 1.1);
     }
 }
