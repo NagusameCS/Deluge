@@ -5,11 +5,15 @@ export class Player {
     public mesh: TransformNode;
     public camera: UniversalCamera;
     public aggregate: PhysicsAggregate;
-    private inputMap: any = {};
-    private speed: number = 10;
+    private inputMap: Record<string, boolean> = {};
+    private baseSpeed = 12;
+    private sprintMultiplier = 1.5;
+    private acceleration = 35;
+    private damping = 6;
 
     private tools: Tool[] = [];
     private currentToolIndex: number = 0;
+    private toolChanged?: (index: number, tool: Tool) => void;
 
     constructor(scene: Scene, canvas: HTMLCanvasElement) {
         // Player Mesh (Capsule)
@@ -30,6 +34,8 @@ export class Player {
         this.camera.parent = playerMesh;
         this.camera.attachControl(canvas, true);
         this.camera.minZ = 0.1;
+        const mouseInput = this.camera.inputs.attached["mouse"] as any;
+        if (mouseInput) mouseInput.angularSensibility = 1200; // snappier look
 
         // Remove default keyboard controls as we'll handle physics movement
         this.camera.inputs.removeByType("FreeCameraKeyboardMoveInput");
@@ -41,6 +47,7 @@ export class Player {
         this.tools.push(new Pickaxe(scene, this.camera));
 
         this.tools[this.currentToolIndex].activate();
+        this.notifyToolChanged();
 
         // Input
         scene.actionManager = new ActionManager(scene);
@@ -73,11 +80,20 @@ export class Player {
         });
     }
 
+    public onToolChanged(cb: (index: number, tool: Tool) => void) {
+        this.toolChanged = cb;
+    }
+
+    private notifyToolChanged() {
+        if (this.toolChanged) this.toolChanged(this.currentToolIndex, this.tools[this.currentToolIndex]);
+    }
+
     private switchTool(index: number) {
         if (index >= 0 && index < this.tools.length) {
             this.tools[this.currentToolIndex].deactivate();
             this.currentToolIndex = index;
             this.tools[this.currentToolIndex].activate();
+            this.notifyToolChanged();
         }
     }
 
@@ -100,17 +116,30 @@ export class Player {
 
         moveDir.normalize();
 
-        const velocity = moveDir.scale(this.speed);
-
-        // Get current velocity to preserve Y (gravity)
         const currentVel = this.aggregate.body.getLinearVelocity();
-        velocity.y = currentVel.y;
 
-        // Simple Jump
-        if (this.inputMap[" "] && Math.abs(currentVel.y) < 0.1) {
-            velocity.y = 5;
+        // Movement speed with sprint
+        const targetSpeed = this.baseSpeed * (this.inputMap["shift"] ? this.sprintMultiplier : 1);
+        const targetVel = moveDir.scale(targetSpeed);
+        targetVel.y = currentVel.y;
+
+        // Smooth acceleration
+        const delta = this.mesh.getScene().getEngine().getDeltaTime() / 1000;
+        const blend = Math.min(1, this.acceleration * delta);
+        const newVel = Vector3.Lerp(currentVel, targetVel, blend);
+
+        // Damping to reduce slide when no input
+        if (moveDir.lengthSquared() === 0) {
+            const damp = Math.max(0, 1 - this.damping * delta);
+            newVel.x *= damp;
+            newVel.z *= damp;
         }
 
-        this.aggregate.body.setLinearVelocity(velocity);
+        // Simple Jump
+        if (this.inputMap[" "] && Math.abs(currentVel.y) < 0.2) {
+            newVel.y = 6.5;
+        }
+
+        this.aggregate.body.setLinearVelocity(newVel);
     }
 }
