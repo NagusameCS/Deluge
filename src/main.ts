@@ -1,7 +1,7 @@
 import "./style.css";
 import { WebGPUEngine, Scene, Vector3, HemisphericLight, MeshBuilder, Engine, HavokPlugin, PhysicsAggregate, PhysicsShapeType } from "@babylonjs/core";
 import HavokPhysics from "@babylonjs/havok";
-import havokWasmUrl from "@babylonjs/havok/HavokPhysics.wasm?url";
+import havokWasmUrl from "../node_modules/@babylonjs/havok/lib/esm/HavokPhysics.wasm?url";
 import { Player } from "./player";
 
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
