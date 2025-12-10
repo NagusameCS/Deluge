@@ -10,7 +10,7 @@ import {
   PhysicsAggregate,
   PhysicsShapeType,
   StandardMaterial,
-  Texture,
+  DynamicTexture,
   Color3,
   VertexData,
   VertexBuffer,
@@ -21,6 +21,10 @@ import { AdvancedDynamicTexture, StackPanel, Rectangle, TextBlock } from "@babyl
 import { Player } from "./player";
 import { InteractionSystem } from "./interaction";
 import { Slider } from "@babylonjs/gui";
+import { spawnCreatures } from "./mobs";
+import { GameState } from "./state";
+import { createCraftingUI } from "./crafting";
+import { createSkillUI } from "./skills";
 
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
 
@@ -41,15 +45,20 @@ async function createScene(engine: Engine | WebGPUEngine) {
   const havokPlugin = new HavokPlugin(true, havokInstance);
   scene.enablePhysics(new Vector3(0, -9.81, 0), havokPlugin);
 
-  const interaction = new InteractionSystem();
+  const state = new GameState();
+  const interaction = new InteractionSystem(state);
+  const textures = createLocalTextures(scene);
   const player = new Player(scene, canvas, interaction);
 
   const light = new HemisphericLight("light", new Vector3(0, 1, 0), scene);
   light.intensity = 0.7;
 
-  createTerrain(scene);
-  scatterProps(scene, interaction);
-  createHotbar(scene, player);
+  const terrainSize = createTerrain(scene, textures);
+  scatterProps(scene, interaction, terrainSize, textures);
+  spawnCreatures(scene, interaction, terrainSize);
+  createCraftingUI(scene, state);
+  createSkillUI(scene, state);
+  createHotbar(scene);
   createSettings(scene, player);
 
   return scene;
@@ -73,7 +82,52 @@ function fbm(x: number, z: number) {
   return total;
 }
 
-function createTerrain(scene: Scene) {
+function mixColor(a: Color3, b: Color3, t: number) {
+  return new Color3(
+    a.r * t + b.r * (1 - t),
+    a.g * t + b.g * (1 - t),
+    a.b * t + b.b * (1 - t)
+  );
+}
+
+function makeNoiseTexture(scene: Scene, size: number, c1: Color3, c2: Color3, seed: number, scale = 4) {
+  const tex = new DynamicTexture("noise" + seed, { width: size, height: size }, scene, false);
+  const ctx = tex.getContext();
+  const imageData = ctx.getImageData(0, 0, size, size);
+  const data = imageData.data;
+
+  const hash = (x: number, y: number) => {
+    return Math.abs(Math.sin(x * 12.9898 + y * 78.233 + seed) % 1);
+  };
+
+  for (let y = 0; y < size; y++) {
+    for (let x = 0; x < size; x++) {
+      const nx = (x / size) * scale;
+      const ny = (y / size) * scale;
+      const n = hash(nx, ny) * 0.6 + hash(nx * 2.1, ny * 2.1) * 0.3 + hash(nx * 4.3, ny * 4.3) * 0.1;
+      const c = mixColor(c1, c2, n);
+      const idx = (y * size + x) * 4;
+      data[idx] = Math.floor(c.r * 255);
+      data[idx + 1] = Math.floor(c.g * 255);
+      data[idx + 2] = Math.floor(c.b * 255);
+      data[idx + 3] = 255;
+    }
+  }
+  ctx.putImageData(imageData, 0, 0);
+  tex.update(false);
+  return tex;
+}
+
+function createLocalTextures(scene: Scene) {
+  return {
+    grass: makeNoiseTexture(scene, 512, new Color3(0.18, 0.32, 0.14), new Color3(0.08, 0.18, 0.07), 11, 6),
+    rock: makeNoiseTexture(scene, 512, new Color3(0.35, 0.35, 0.36), new Color3(0.18, 0.18, 0.2), 23, 5),
+    bark: makeNoiseTexture(scene, 512, new Color3(0.35, 0.24, 0.14), new Color3(0.22, 0.15, 0.1), 31, 10),
+    leaves: makeNoiseTexture(scene, 512, new Color3(0.18, 0.5, 0.2), new Color3(0.08, 0.3, 0.12), 41, 8),
+  };
+}
+
+function createTerrain(scene: Scene, textures: ReturnType<typeof createLocalTextures>) {
   const size = 320;
   const subdivisions = 180;
   const ground = MeshBuilder.CreateGround("ground", { width: size, height: size, subdivisions }, scene);
@@ -88,20 +142,23 @@ function createTerrain(scene: Scene) {
   ground.updateVerticesData(VertexBuffer.PositionKind, positions);
   VertexData.ComputeNormals(positions, ground.getIndices()!, ground.getVerticesData(VertexBuffer.NormalKind)!);
 
-  const grassTex = new Texture("https://assets.babylonjs.com/environments/grass.jpg", scene);
-  grassTex.uScale = grassTex.vScale = 8;
   const groundMat = new StandardMaterial("groundMat", scene);
-  groundMat.diffuseTexture = grassTex;
-  groundMat.specularColor = Color3.Black();
-  groundMat.emissiveColor = new Color3(0.015, 0.04, 0.015);
+  const gTex = textures.grass;
+  gTex.uScale = gTex.vScale = 10;
+  groundMat.diffuseTexture = gTex;
+  groundMat.specularColor = new Color3(0.08, 0.08, 0.08);
+  groundMat.emissiveColor = new Color3(0.02, 0.05, 0.02);
   ground.material = groundMat;
 
   new PhysicsAggregate(ground, PhysicsShapeType.MESH, { mass: 0, restitution: 0.0, friction: 1.0 }, scene);
+  return size;
 }
 
-function scatterProps(scene: Scene, interaction: InteractionSystem) {
+function scatterProps(scene: Scene, interaction: InteractionSystem, size: number, textures: ReturnType<typeof createLocalTextures>) {
   const treeMat = new StandardMaterial("treeMat", scene);
-  treeMat.diffuseTexture = new Texture("https://assets.babylonjs.com/environments/wood.jpg", scene);
+  const barkTex = textures.bark;
+  barkTex.uScale = barkTex.vScale = 2;
+  treeMat.diffuseTexture = barkTex;
   treeMat.specularColor = Color3.Black();
 
   const leafMat = new StandardMaterial("leafMat", scene);
@@ -109,20 +166,22 @@ function scatterProps(scene: Scene, interaction: InteractionSystem) {
   leafMat.specularColor = new Color3(0.02, 0.05, 0.02);
   leafMat.emissiveColor = new Color3(0.02, 0.05, 0.02);
   leafMat.alpha = 0.95;
-  leafMat.diffuseTexture = new Texture("https://assets.babylonjs.com/environments/leaf.jpg", scene);
+  const leafTex = textures.leaves;
+  leafTex.uScale = leafTex.vScale = 2.5;
+  leafMat.diffuseTexture = leafTex;
 
   const rockMat = new StandardMaterial("rockMat", scene);
-  rockMat.diffuseTexture = new Texture("https://assets.babylonjs.com/environments/rock.jpg", scene);
-  rockMat.specularColor = new Color3(0.1, 0.1, 0.1);
+  const rockTex = textures.rock;
+  rockTex.uScale = rockTex.vScale = 3;
+  rockMat.diffuseTexture = rockTex;
+  rockMat.specularColor = new Color3(0.15, 0.15, 0.15);
   rockMat.emissiveColor = new Color3(0.01, 0.01, 0.01);
-  rockMat.useParallax = true;
-  rockMat.useParallaxOcclusion = true;
-  rockMat.parallaxScaleBias = 0.02;
+  const spread = size / 2 - 20;
 
   for (let i = 0; i < 50; i++) {
     const tree = MeshBuilder.CreateCylinder("tree" + i, { height: 5, diameter: 0.8 }, scene);
-    tree.position.x = Math.random() * 180 - 90;
-    tree.position.z = Math.random() * 180 - 90;
+    tree.position.x = Math.random() * spread * 2 - spread;
+    tree.position.z = Math.random() * spread * 2 - spread;
     tree.position.y = 2.5;
     tree.material = treeMat;
 
@@ -132,25 +191,25 @@ function scatterProps(scene: Scene, interaction: InteractionSystem) {
 
     new PhysicsAggregate(tree, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
     new PhysicsAggregate(leaves, PhysicsShapeType.SPHERE, { mass: 0 }, scene);
-    interaction.register(tree, "tree", 60);
-    interaction.register(leaves, "tree", 30);
+    interaction.register(tree, { kind: "resource", resourceType: "wood", hp: 60, reward: { Wood: 3, Fiber: 1 }, skillPoints: 1 });
+    interaction.register(leaves, { kind: "resource", resourceType: "wood", hp: 30, reward: { Wood: 1, Fiber: 1 }, skillPoints: 1 });
   }
 
   for (let i = 0; i < 60; i++) {
     const rock = MeshBuilder.CreatePolyhedron("rock" + i, { type: 4, size: 1.6 }, scene);
-    rock.position.x = Math.random() * 180 - 90;
-    rock.position.z = Math.random() * 180 - 90;
+    rock.position.x = Math.random() * spread * 2 - spread;
+    rock.position.z = Math.random() * spread * 2 - spread;
     rock.position.y = 1;
     rock.material = rockMat;
     new PhysicsAggregate(rock, PhysicsShapeType.MESH, { mass: 0 }, scene);
-    interaction.register(rock, "rock", 80);
+    interaction.register(rock, { kind: "resource", resourceType: "stone", hp: 80, reward: { Stone: 3 }, skillPoints: 1 });
   }
 }
 
 // Skybox removed per request
 
 // --- UI ---
-function createHotbar(scene: Scene, player: Player) {
+function createHotbar(scene: Scene) {
   const ui = AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene);
 
   const crosshair = new Rectangle();
@@ -163,47 +222,6 @@ function createHotbar(scene: Scene, player: Player) {
   crosshair.horizontalAlignment = Rectangle.HORIZONTAL_ALIGNMENT_CENTER;
   crosshair.verticalAlignment = Rectangle.VERTICAL_ALIGNMENT_CENTER;
   ui.addControl(crosshair);
-  const panel = new StackPanel();
-  panel.isVertical = false;
-  panel.height = "80px";
-  panel.verticalAlignment = StackPanel.VERTICAL_ALIGNMENT_BOTTOM;
-  panel.horizontalAlignment = StackPanel.HORIZONTAL_ALIGNMENT_CENTER;
-  panel.spacing = 8;
-  ui.addControl(panel);
-
-  const toolNames = ["Sword", "Crossbow", "Axe", "Pickaxe"];
-  const slots: Rectangle[] = [];
-
-  toolNames.forEach((name, idx) => {
-    const slot = new Rectangle();
-    slot.width = "80px";
-    slot.height = "70px";
-    slot.color = "#888";
-    slot.thickness = 2;
-    slot.cornerRadius = 6;
-    slot.background = "rgba(0,0,0,0.45)";
-
-    const label = new TextBlock();
-    label.text = `${idx + 1}. ${name}`;
-    label.color = "white";
-    label.fontSize = 16;
-    label.paddingTop = 6;
-
-    slot.addControl(label);
-    panel.addControl(slot);
-    slots.push(slot);
-  });
-
-  const updateHighlight = (index: number) => {
-    slots.forEach((slot, i) => {
-      slot.color = i === index ? "#ffd54f" : "#888";
-      slot.thickness = i === index ? 3 : 2;
-      slot.background = i === index ? "rgba(255, 213, 79, 0.25)" : "rgba(0,0,0,0.45)";
-    });
-  };
-
-  updateHighlight(0);
-  player.onToolChanged((index) => updateHighlight(index));
 }
 
 function createSettings(scene: Scene, player: Player) {

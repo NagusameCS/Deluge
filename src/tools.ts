@@ -44,7 +44,7 @@ export abstract class Tool {
         if (hit && hit.pickedMesh) {
             this.onHit(hit.pickedMesh);
             if (this.interaction) {
-                this.interaction.handleHit(hit.pickedMesh, this.type);
+                this.interaction.handleHit(hit.pickedMesh, 12);
             }
         }
     }
@@ -57,36 +57,45 @@ export class Sword extends Tool {
         super(scene, parent, "Sword", interaction);
     }
     createMesh(scene: Scene): AbstractMesh {
-        const blade = MeshBuilder.CreateBox("sword_blade", { width: 0.08, height: 0.2, depth: 1.4 }, scene);
-        blade.position.z = 0.5;
-        const hilt = MeshBuilder.CreateBox("sword_hilt", { width: 0.3, height: 0.08, depth: 0.2 }, scene);
-        hilt.position.z = -0.15;
-        hilt.position.y = -0.1;
+        const blade = MeshBuilder.CreateBox("sword_blade", { width: 0.08, height: 0.14, depth: 1.35 }, scene);
+        blade.position.z = 0.6;
 
-        const handle = MeshBuilder.CreateCylinder("sword_handle", { height: 0.4, diameter: 0.08 }, scene);
-        handle.rotation.x = Math.PI / 2;
-        handle.position.z = -0.35;
-        handle.position.y = -0.1;
+        const tip = MeshBuilder.CreateBox("sword_tip", { width: 0.06, height: 0.12, depth: 0.25 }, scene);
+        tip.position.z = 1.25;
+        tip.parent = blade;
 
-        hilt.parent = blade;
-        handle.parent = blade;
+        const guard = MeshBuilder.CreateBox("sword_guard", { width: 0.4, height: 0.1, depth: 0.12 }, scene);
+        guard.position.z = -0.05;
+        guard.parent = blade;
+
+        const grip = MeshBuilder.CreateCylinder("sword_grip", { height: 0.45, diameter: 0.1 }, scene);
+        grip.rotation.x = Math.PI / 2;
+        grip.position.z = -0.4;
+        grip.parent = blade;
+
+        const pommel = MeshBuilder.CreateSphere("sword_pommel", { diameter: 0.14 }, scene);
+        pommel.position.z = -0.7;
+        pommel.parent = blade;
 
         const bladeMat = new StandardMaterial("bladeMat", scene);
-        bladeMat.diffuseColor = new Color3(0.85, 0.85, 0.9);
-        const hiltMat = new StandardMaterial("hiltMat", scene);
-        hiltMat.diffuseColor = new Color3(0.4, 0.25, 0.1);
-
+        bladeMat.diffuseColor = new Color3(0.9, 0.92, 0.96);
+        bladeMat.specularColor = new Color3(0.9, 0.9, 0.9);
         blade.material = bladeMat;
-        hilt.material = hiltMat;
-        handle.material = hiltMat;
+        tip.material = bladeMat;
+
+        const guardMat = new StandardMaterial("guardMat", scene);
+        guardMat.diffuseColor = new Color3(0.65, 0.55, 0.25);
+        guard.material = guardMat;
+        pommel.material = guardMat;
+
+        const gripMat = new StandardMaterial("gripMat", scene);
+        gripMat.diffuseColor = new Color3(0.28, 0.16, 0.12);
+        grip.material = gripMat;
 
         return blade;
     }
     onHit(mesh: AbstractMesh) {
         console.log("Hit with sword:", mesh.name);
-        if (mesh.name.includes("enemy")) {
-            mesh.dispose();
-        }
     }
 }
 
@@ -95,27 +104,40 @@ export class Crossbow extends Tool {
         super(scene, parent, "Crossbow", interaction);
     }
     createMesh(scene: Scene): AbstractMesh {
-        const body = MeshBuilder.CreateBox("crossbow_body", { width: 0.5, height: 0.12, depth: 0.6 }, scene);
-        const bow = MeshBuilder.CreateCylinder("crossbow_bow", { height: 0.7, diameter: 0.08 }, scene);
-        bow.rotation.z = Math.PI / 2;
-        bow.position.z = 0.2;
-        bow.parent = body;
+        const stock = MeshBuilder.CreateBox("crossbow_stock", { width: 0.4, height: 0.14, depth: 0.9 }, scene);
+        stock.position.z = 0.2;
 
-        const limbLeft = MeshBuilder.CreateBox("crossbow_limb_left", { width: 0.06, height: 0.08, depth: 0.4 }, scene);
-        limbLeft.position.x = -0.28;
-        limbLeft.position.z = 0.2;
-        limbLeft.parent = body;
-        const limbRight = limbLeft.clone("crossbow_limb_right")!;
-        limbRight.position.x = 0.28;
+        const riser = MeshBuilder.CreateBox("crossbow_riser", { width: 0.2, height: 0.12, depth: 0.2 }, scene);
+        riser.position.z = 0.65;
+        riser.parent = stock;
 
-        const mat = new StandardMaterial("crossbowMat", scene);
-        mat.diffuseColor = new Color3(0.35, 0.2, 0.1);
-        body.material = mat;
-        bow.material = mat;
-        limbLeft.material = mat;
-        limbRight.material = mat;
+        const limb = MeshBuilder.CreateBox("crossbow_limb", { width: 0.8, height: 0.06, depth: 0.08 }, scene);
+        limb.position.z = 0.75;
+        limb.parent = stock;
 
-        return body;
+        const bowString = MeshBuilder.CreateCylinder("crossbow_string", { height: 0.82, diameter: 0.015 }, scene);
+        bowString.rotation.z = Math.PI / 2;
+        bowString.position.z = 0.74;
+        bowString.parent = stock;
+
+        const grip = MeshBuilder.CreateBox("crossbow_grip", { width: 0.18, height: 0.3, depth: 0.16 }, scene);
+        grip.position.z = 0;
+        grip.position.y = -0.2;
+        grip.parent = stock;
+
+        const wood = new StandardMaterial("crossbowWood", scene);
+        wood.diffuseColor = new Color3(0.45, 0.28, 0.14);
+        const metal = new StandardMaterial("crossbowMetal", scene);
+        metal.diffuseColor = new Color3(0.65, 0.65, 0.7);
+        metal.specularColor = new Color3(0.7, 0.7, 0.7);
+
+        stock.material = wood;
+        riser.material = metal;
+        limb.material = metal;
+        bowString.material = metal;
+        grip.material = wood;
+
+        return stock;
     }
     onHit(mesh: AbstractMesh) {
         console.log("Shot with crossbow:", mesh.name);
@@ -128,30 +150,35 @@ export class Axe extends Tool {
         super(scene, parent, "Axe", interaction);
     }
     createMesh(scene: Scene): AbstractMesh {
-        const handle = MeshBuilder.CreateCylinder("axe_handle", { height: 1.2, diameter: 0.08 }, scene);
-        handle.rotation.x = Math.PI / 2;
-        handle.position.z = 0.1;
+        const haft = MeshBuilder.CreateCylinder("axe_handle", { height: 1.25, diameter: 0.08 }, scene);
+        haft.rotation.x = Math.PI / 2;
+        haft.position.z = 0.1;
 
-        const head = MeshBuilder.CreateBox("axe_head", { width: 0.6, height: 0.35, depth: 0.12 }, scene);
-        head.position.z = 0.45;
-        head.parent = handle;
+        const head = MeshBuilder.CreateBox("axe_head", { width: 0.7, height: 0.4, depth: 0.12 }, scene);
+        head.position.z = 0.55;
+        head.parent = haft;
 
-        const handleMat = new StandardMaterial("axeHandleMat", scene);
-        handleMat.diffuseColor = new Color3(0.5, 0.35, 0.2);
+        const edge = MeshBuilder.CreateBox("axe_edge", { width: 0.7, height: 0.05, depth: 0.16 }, scene);
+        edge.position.z = 0.72;
+        edge.parent = haft;
+
+        const haftMat = new StandardMaterial("axeHandleMat", scene);
+        haftMat.diffuseColor = new Color3(0.48, 0.32, 0.18);
         const headMat = new StandardMaterial("axeHeadMat", scene);
-        headMat.diffuseColor = new Color3(0.7, 0.75, 0.8);
-        headMat.specularColor = new Color3(0.8, 0.8, 0.9);
+        headMat.diffuseColor = new Color3(0.76, 0.8, 0.86);
+        headMat.specularColor = new Color3(0.9, 0.9, 0.95);
+        const edgeMat = new StandardMaterial("axeEdgeMat", scene);
+        edgeMat.diffuseColor = new Color3(0.9, 0.9, 0.95);
+        edgeMat.specularColor = new Color3(0.95, 0.95, 0.95);
 
-        handle.material = handleMat;
+        haft.material = haftMat;
         head.material = headMat;
+        edge.material = edgeMat;
 
-        return handle;
+        return haft;
     }
     onHit(mesh: AbstractMesh) {
         console.log("Hit with axe:", mesh.name);
-        if (mesh.name.includes("tree")) {
-            mesh.dispose();
-        }
     }
 }
 
@@ -160,32 +187,30 @@ export class Pickaxe extends Tool {
         super(scene, parent, "Pickaxe", interaction);
     }
     createMesh(scene: Scene): AbstractMesh {
-        const handle = MeshBuilder.CreateCylinder("pick_handle", { height: 1.2, diameter: 0.08 }, scene);
-        handle.rotation.z = Math.PI / 2;
+        const haft = MeshBuilder.CreateCylinder("pick_handle", { height: 1.25, diameter: 0.08 }, scene);
+        haft.rotation.z = Math.PI / 2;
 
-        const head = MeshBuilder.CreateBox("pick_head", { width: 0.8, height: 0.15, depth: 0.2 }, scene);
+        const head = MeshBuilder.CreateBox("pick_head", { width: 0.95, height: 0.16, depth: 0.18 }, scene);
         head.position.x = 0.3;
-        head.parent = handle;
+        head.parent = haft;
 
         const spike = MeshBuilder.CreateBox("pick_spike", { width: 0.3, height: 0.12, depth: 0.18 }, scene);
         spike.position.x = -0.55;
-        spike.parent = handle;
+        spike.parent = haft;
 
-        const handleMat = new StandardMaterial("pickHandleMat", scene);
-        handleMat.diffuseColor = new Color3(0.45, 0.3, 0.18);
+        const haftMat = new StandardMaterial("pickHandleMat", scene);
+        haftMat.diffuseColor = new Color3(0.42, 0.28, 0.18);
         const headMat = new StandardMaterial("pickHeadMat", scene);
-        headMat.diffuseColor = new Color3(0.65, 0.7, 0.75);
+        headMat.diffuseColor = new Color3(0.68, 0.72, 0.78);
+        headMat.specularColor = new Color3(0.8, 0.8, 0.85);
 
-        handle.material = handleMat;
+        haft.material = haftMat;
         head.material = headMat;
         spike.material = headMat;
 
-        return handle;
+        return haft;
     }
     onHit(mesh: AbstractMesh) {
         console.log("Hit with pickaxe:", mesh.name);
-        if (mesh.name.includes("rock")) {
-            mesh.dispose();
-        }
     }
 }

@@ -1,5 +1,4 @@
-import { Scene, Vector3, MeshBuilder, PhysicsAggregate, PhysicsShapeType, UniversalCamera, TransformNode, ActionManager, ExecuteCodeAction, Ray } from "@babylonjs/core";
-import { Tool, Sword, Crossbow, Axe, Pickaxe } from "./tools";
+import { Scene, Vector3, MeshBuilder, PhysicsAggregate, PhysicsShapeType, UniversalCamera, TransformNode, ActionManager, ExecuteCodeAction, Ray, StandardMaterial, Color3, Matrix } from "@babylonjs/core";
 import { InteractionSystem } from "./interaction";
 
 export class Player {
@@ -13,10 +12,11 @@ export class Player {
     private damping = 8;
     private jumpStrength = 6.5;
 
-    private tools: Tool[] = [];
-    private currentToolIndex: number = 0;
-    private toolChanged?: (index: number, tool: Tool) => void;
     private mouseInput: any;
+    private fireCooldown = 0;
+    private fireRate = 0.18;
+    private bulletDamage = 24;
+    private interaction: InteractionSystem;
 
     constructor(scene: Scene, canvas: HTMLCanvasElement, interaction: InteractionSystem) {
         // Player Mesh (Capsule)
@@ -45,22 +45,13 @@ export class Player {
         // Remove default keyboard controls as we'll handle physics movement
         this.camera.inputs.removeByType("FreeCameraKeyboardMoveInput");
 
-        // Initialize Tools
-        this.tools.push(new Sword(scene, this.camera, interaction));
-        this.tools.push(new Crossbow(scene, this.camera, interaction));
-        this.tools.push(new Axe(scene, this.camera, interaction));
-        this.tools.push(new Pickaxe(scene, this.camera, interaction));
-
-        this.tools[this.currentToolIndex].activate();
-        this.notifyToolChanged();
+        this.interaction = interaction;
+        this.createGun(scene);
 
         // Input
         scene.actionManager = new ActionManager(scene);
         scene.actionManager.registerAction(new ExecuteCodeAction(ActionManager.OnKeyDownTrigger, (evt) => {
             const key = evt.sourceEvent.key;
-            if (["1", "2", "3", "4"].includes(key)) {
-                this.switchTool(parseInt(key) - 1);
-            }
             this.inputMap[key.toLowerCase()] = true;
         }));
         scene.actionManager.registerAction(new ExecuteCodeAction(ActionManager.OnKeyUpTrigger, (evt) => {
@@ -70,11 +61,10 @@ export class Player {
         // Mouse Input
         scene.onPointerDown = (evt) => {
             if (evt.button === 0) { // Left click
-                // Lock pointer if not locked
                 if (document.pointerLockElement !== canvas) {
                     canvas.requestPointerLock();
                 } else {
-                    this.tools[this.currentToolIndex].action();
+                    this.tryShoot();
                 }
             }
         };
@@ -101,23 +91,6 @@ export class Player {
 
     public setJumpStrength(value: number) {
         this.jumpStrength = value;
-    }
-
-    public onToolChanged(cb: (index: number, tool: Tool) => void) {
-        this.toolChanged = cb;
-    }
-
-    private notifyToolChanged() {
-        if (this.toolChanged) this.toolChanged(this.currentToolIndex, this.tools[this.currentToolIndex]);
-    }
-
-    private switchTool(index: number) {
-        if (index >= 0 && index < this.tools.length) {
-            this.tools[this.currentToolIndex].deactivate();
-            this.currentToolIndex = index;
-            this.tools[this.currentToolIndex].activate();
-            this.notifyToolChanged();
-        }
     }
 
     private update() {
@@ -148,6 +121,7 @@ export class Player {
 
         // Smooth acceleration
         const delta = this.mesh.getScene().getEngine().getDeltaTime() / 1000;
+        this.fireCooldown = Math.max(0, this.fireCooldown - delta);
         const blend = Math.min(1, this.acceleration * delta);
         const newVel = Vector3.Lerp(currentVel, targetVel, blend);
 
@@ -170,9 +144,9 @@ export class Player {
             newVel.y = 0;
         }
 
-        // Add slight downforce to keep contact
-        if (grounded && newVel.y <= 0.5) {
-            newVel.y = Math.min(newVel.y, -1);
+        // Keep head steady when grounded
+        if (grounded && !this.inputMap[" "]) {
+            newVel.y = 0;
         }
 
         this.aggregate.body.setLinearVelocity(newVel);
@@ -183,5 +157,36 @@ export class Player {
         const ray = new Ray(origin, new Vector3(0, -1, 0), 1.2);
         const hit = this.mesh.getScene().pickWithRay(ray, (m) => m.name.startsWith("ground"));
         return !!(hit && hit.hit && hit.distance <= 1.1);
+    }
+
+    private createGun(scene: Scene) {
+        const body = MeshBuilder.CreateBox("gunBody", { width: 0.3, height: 0.18, depth: 0.6 }, scene);
+        body.position = new Vector3(0.5, -0.4, 1);
+        body.parent = this.camera;
+        const barrel = MeshBuilder.CreateBox("gunBarrel", { width: 0.12, height: 0.12, depth: 0.6 }, scene);
+        barrel.position = new Vector3(0.45, -0.32, 1.5);
+        barrel.parent = this.camera;
+
+        const mat = new StandardMaterial("gunMat", scene);
+        mat.diffuseColor = new Color3(0.15, 0.18, 0.22);
+        mat.specularColor = new Color3(0.25, 0.25, 0.25);
+        body.material = mat;
+        barrel.material = mat;
+    }
+
+    private tryShoot() {
+        if (this.fireCooldown > 0) return;
+        this.fireCooldown = this.fireRate;
+        const scene = this.mesh.getScene();
+        const ray = scene.createPickingRay(
+            scene.getEngine().getRenderWidth() / 2,
+            scene.getEngine().getRenderHeight() / 2,
+            Matrix.Identity(),
+            this.camera
+        );
+        const hit = scene.pickWithRay(ray, (m) => !!m && m !== this.mesh);
+        if (hit && hit.pickedMesh) {
+            this.interaction.handleHit(hit.pickedMesh, this.bulletDamage);
+        }
     }
 }

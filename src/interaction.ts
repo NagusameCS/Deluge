@@ -1,46 +1,66 @@
 import { AbstractMesh } from "@babylonjs/core";
-import type { ToolType } from "./tools";
+import type { DamageCategory } from "./state";
+import { GameState } from "./state";
 
-export type ResourceType = "tree" | "rock" | "generic";
+export type ResourceType = "wood" | "stone" | "generic";
+type DamageableKind = "resource" | "mob" | "animal";
 
-interface ResourceState {
+interface DamageableState {
     hp: number;
-    type: ResourceType;
+    kind: DamageableKind;
+    resourceType?: ResourceType;
+    reward?: Record<string, number>;
+    skillPoints?: number;
 }
 
 export class InteractionSystem {
-    private resources = new Map<string, ResourceState>();
+    private targets = new Map<string, DamageableState>();
+    private state: GameState;
 
-    register(mesh: AbstractMesh, type: ResourceType, hp: number) {
-        mesh.metadata = { ...(mesh.metadata || {}), interactable: true, resourceType: type };
-        this.resources.set(mesh.uniqueId.toString(), { hp, type });
+    constructor(state: GameState) {
+        this.state = state;
     }
 
-    handleHit(mesh: AbstractMesh, tool: ToolType) {
-        const state = this.resources.get(mesh.uniqueId.toString());
+    register(mesh: AbstractMesh, config: DamageableState) {
+        mesh.metadata = {
+            ...(mesh.metadata || {}),
+            damageable: true,
+            kind: config.kind,
+            resourceType: config.resourceType,
+        };
+        this.targets.set(mesh.uniqueId.toString(), config);
+    }
+
+    handleHit(mesh: AbstractMesh, baseDamage: number, overrideCategory?: DamageCategory) {
+        const state = this.targets.get(mesh.uniqueId.toString());
         if (!state) return;
 
-        const damage = this.getDamage(tool, state.type);
+        const damage = this.getDamage(baseDamage, state, overrideCategory);
         state.hp -= damage;
+
         if (state.hp <= 0) {
             mesh.dispose();
-            this.resources.delete(mesh.uniqueId.toString());
+            this.targets.delete(mesh.uniqueId.toString());
+            if (state.reward) {
+                for (const [item, qty] of Object.entries(state.reward)) {
+                    this.state.addResource(item, qty);
+                }
+            }
+            if (state.skillPoints) {
+                this.state.addSkillPoints(state.skillPoints);
+            }
         } else {
-            this.resources.set(mesh.uniqueId.toString(), state);
+            this.targets.set(mesh.uniqueId.toString(), state);
         }
     }
 
-    private getDamage(tool: ToolType, type: ResourceType) {
-        if (type === "tree") {
-            if (tool === "Axe") return 25;
-            if (tool === "Sword") return 5;
-            return 2;
+    private getDamage(baseDamage: number, state: DamageableState, overrideCategory?: DamageCategory) {
+        const category: DamageCategory = overrideCategory || state.resourceType || (state.kind === "mob" ? "mob" : state.kind === "animal" ? "animal" : "generic");
+        const bonus = this.state.getDamageBonus(category);
+        // Light weighting for softer resources
+        if (state.kind === "resource") {
+            return baseDamage * 0.7 + bonus;
         }
-        if (type === "rock") {
-            if (tool === "Pickaxe") return 25;
-            if (tool === "Sword") return 3;
-            return 2;
-        }
-        return 5;
+        return baseDamage + bonus;
     }
 }
