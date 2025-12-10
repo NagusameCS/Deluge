@@ -1,5 +1,6 @@
 import { Scene, Vector3, MeshBuilder, PhysicsAggregate, PhysicsShapeType, UniversalCamera, TransformNode, ActionManager, ExecuteCodeAction, Ray } from "@babylonjs/core";
 import { Tool, Sword, Crossbow, Axe, Pickaxe } from "./tools";
+import { InteractionSystem } from "./interaction";
 
 export class Player {
     public mesh: TransformNode;
@@ -17,7 +18,7 @@ export class Player {
     private toolChanged?: (index: number, tool: Tool) => void;
     private mouseInput: any;
 
-    constructor(scene: Scene, canvas: HTMLCanvasElement) {
+    constructor(scene: Scene, canvas: HTMLCanvasElement, interaction: InteractionSystem) {
         // Player Mesh (Capsule)
         const playerMesh = MeshBuilder.CreateCapsule("player", { height: 2, radius: 0.5 }, scene);
         playerMesh.position.y = 10;
@@ -45,10 +46,10 @@ export class Player {
         this.camera.inputs.removeByType("FreeCameraKeyboardMoveInput");
 
         // Initialize Tools
-        this.tools.push(new Sword(scene, this.camera));
-        this.tools.push(new Crossbow(scene, this.camera));
-        this.tools.push(new Axe(scene, this.camera));
-        this.tools.push(new Pickaxe(scene, this.camera));
+        this.tools.push(new Sword(scene, this.camera, interaction));
+        this.tools.push(new Crossbow(scene, this.camera, interaction));
+        this.tools.push(new Axe(scene, this.camera, interaction));
+        this.tools.push(new Pickaxe(scene, this.camera, interaction));
 
         this.tools[this.currentToolIndex].activate();
         this.notifyToolChanged();

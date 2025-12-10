@@ -20,6 +20,7 @@ import HavokPhysics from "@babylonjs/havok";
 import havokWasmUrl from "../node_modules/@babylonjs/havok/lib/esm/HavokPhysics.wasm?url";
 import { AdvancedDynamicTexture, StackPanel, Rectangle, TextBlock } from "@babylonjs/gui";
 import { Player } from "./player";
+import { InteractionSystem } from "./interaction";
 import { Slider } from "@babylonjs/gui";
 
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
@@ -41,7 +42,8 @@ async function createScene(engine: Engine | WebGPUEngine) {
   const havokPlugin = new HavokPlugin(true, havokInstance);
   scene.enablePhysics(new Vector3(0, -9.81, 0), havokPlugin);
 
-  const player = new Player(scene, canvas);
+  const interaction = new InteractionSystem();
+  const player = new Player(scene, canvas, interaction);
 
   const light = new HemisphericLight("light", new Vector3(0, 1, 0), scene);
   light.intensity = 0.7;
@@ -49,7 +51,7 @@ async function createScene(engine: Engine | WebGPUEngine) {
   addSky(scene);
 
   createTerrain(scene);
-  scatterProps(scene);
+  scatterProps(scene, interaction);
   createHotbar(scene, player);
   createSettings(scene, player);
 
@@ -100,7 +102,7 @@ function createTerrain(scene: Scene) {
   new PhysicsAggregate(ground, PhysicsShapeType.MESH, { mass: 0, restitution: 0.02, friction: 0.9 }, scene);
 }
 
-function scatterProps(scene: Scene) {
+function scatterProps(scene: Scene, interaction: InteractionSystem) {
   const treeMat = new StandardMaterial("treeMat", scene);
   treeMat.diffuseTexture = new Texture("https://assets.babylonjs.com/environments/wood.jpg", scene);
   treeMat.specularColor = Color3.Black();
@@ -132,6 +134,8 @@ function scatterProps(scene: Scene) {
 
     new PhysicsAggregate(tree, PhysicsShapeType.CYLINDER, { mass: 0 }, scene);
     new PhysicsAggregate(leaves, PhysicsShapeType.SPHERE, { mass: 0 }, scene);
+    interaction.register(tree, "tree", 60);
+    interaction.register(leaves, "tree", 30);
   }
 
   for (let i = 0; i < 60; i++) {
@@ -141,6 +145,7 @@ function scatterProps(scene: Scene) {
     rock.position.y = 1;
     rock.material = rockMat;
     new PhysicsAggregate(rock, PhysicsShapeType.MESH, { mass: 0 }, scene);
+    interaction.register(rock, "rock", 80);
   }
 }
 

@@ -1,17 +1,20 @@
 import { Scene, AbstractMesh, MeshBuilder, Vector3, Node, Matrix, Camera, StandardMaterial, Color3 } from "@babylonjs/core";
+import { InteractionSystem } from "./interaction";
 
 export type ToolType = "Sword" | "Crossbow" | "Axe" | "Pickaxe";
 
 export abstract class Tool {
     public mesh: AbstractMesh;
     public type: ToolType;
+    protected interaction?: InteractionSystem;
 
-    constructor(scene: Scene, parent: Node, type: ToolType) {
+    constructor(scene: Scene, parent: Node, type: ToolType, interaction?: InteractionSystem) {
         this.type = type;
         this.mesh = this.createMesh(scene);
         this.mesh.parent = parent;
         this.mesh.position = new Vector3(0.5, -0.5, 1); // Position relative to camera
         this.mesh.isVisible = false;
+        this.interaction = interaction;
     }
 
     abstract createMesh(scene: Scene): AbstractMesh;
@@ -40,6 +43,9 @@ export abstract class Tool {
 
         if (hit && hit.pickedMesh) {
             this.onHit(hit.pickedMesh);
+            if (this.interaction) {
+                this.interaction.handleHit(hit.pickedMesh, this.type);
+            }
         }
     }
 
@@ -47,8 +53,8 @@ export abstract class Tool {
 }
 
 export class Sword extends Tool {
-    constructor(scene: Scene, parent: Node) {
-        super(scene, parent, "Sword");
+    constructor(scene: Scene, parent: Node, interaction?: InteractionSystem) {
+        super(scene, parent, "Sword", interaction);
     }
     createMesh(scene: Scene): AbstractMesh {
         const blade = MeshBuilder.CreateBox("sword_blade", { width: 0.08, height: 0.2, depth: 1.4 }, scene);
@@ -85,8 +91,8 @@ export class Sword extends Tool {
 }
 
 export class Crossbow extends Tool {
-    constructor(scene: Scene, parent: Node) {
-        super(scene, parent, "Crossbow");
+    constructor(scene: Scene, parent: Node, interaction?: InteractionSystem) {
+        super(scene, parent, "Crossbow", interaction);
     }
     createMesh(scene: Scene): AbstractMesh {
         const body = MeshBuilder.CreateBox("crossbow_body", { width: 0.5, height: 0.12, depth: 0.6 }, scene);
@@ -118,8 +124,8 @@ export class Crossbow extends Tool {
 }
 
 export class Axe extends Tool {
-    constructor(scene: Scene, parent: Node) {
-        super(scene, parent, "Axe");
+    constructor(scene: Scene, parent: Node, interaction?: InteractionSystem) {
+        super(scene, parent, "Axe", interaction);
     }
     createMesh(scene: Scene): AbstractMesh {
         const handle = MeshBuilder.CreateCylinder("axe_handle", { height: 1.2, diameter: 0.08 }, scene);
@@ -150,8 +156,8 @@ export class Axe extends Tool {
 }
 
 export class Pickaxe extends Tool {
-    constructor(scene: Scene, parent: Node) {
-        super(scene, parent, "Pickaxe");
+    constructor(scene: Scene, parent: Node, interaction?: InteractionSystem) {
+        super(scene, parent, "Pickaxe", interaction);
     }
     createMesh(scene: Scene): AbstractMesh {
         const handle = MeshBuilder.CreateCylinder("pick_handle", { height: 1.2, diameter: 0.08 }, scene);
