@@ -1,6 +1,7 @@
 import "./style.css";
 import { WebGPUEngine, Scene, Vector3, HemisphericLight, MeshBuilder, Engine, HavokPlugin, PhysicsAggregate, PhysicsShapeType } from "@babylonjs/core";
 import HavokPhysics from "@babylonjs/havok";
+import havokWasmUrl from "@babylonjs/havok/HavokPhysics.wasm?url";
 import { Player } from "./player";
 
 const canvas = document.getElementById("renderCanvas") as HTMLCanvasElement;
@@ -19,7 +20,10 @@ async function createScene(engine: Engine | WebGPUEngine) {
   const scene = new Scene(engine);
 
   // Initialize Physics
-  const havokInstance = await HavokPhysics();
+  // Explicit locateFile to ensure the WASM is loaded instead of an HTML fallback
+  const havokInstance = await HavokPhysics({
+    locateFile: () => havokWasmUrl,
+  });
   const havokPlugin = new HavokPlugin(true, havokInstance);
   scene.enablePhysics(new Vector3(0, -9.81, 0), havokPlugin);
 
