@@ -97,7 +97,7 @@ function createTerrain(scene: Scene) {
   groundMat.emissiveColor = new Color3(0.02, 0.05, 0.02);
   ground.material = groundMat;
 
-  new PhysicsAggregate(ground, PhysicsShapeType.MESH, { mass: 0, restitution: 0.1, friction: 0.8 }, scene);
+  new PhysicsAggregate(ground, PhysicsShapeType.MESH, { mass: 0, restitution: 0.02, friction: 0.9 }, scene);
 }
 
 function scatterProps(scene: Scene) {
@@ -109,6 +109,7 @@ function scatterProps(scene: Scene) {
   leafMat.diffuseColor = new Color3(0.2, 0.55, 0.25);
   leafMat.specularColor = new Color3(0.02, 0.05, 0.02);
   leafMat.emissiveColor = new Color3(0.02, 0.05, 0.02);
+  leafMat.alpha = 0.95;
 
   const rockMat = new StandardMaterial("rockMat", scene);
   rockMat.diffuseTexture = new Texture("https://assets.babylonjs.com/environments/rock.jpg", scene);
@@ -158,6 +159,17 @@ function addSky(scene: Scene) {
 // --- UI ---
 function createHotbar(scene: Scene, player: Player) {
   const ui = AdvancedDynamicTexture.CreateFullscreenUI("UI", true, scene);
+
+  const crosshair = new Rectangle();
+  crosshair.width = "16px";
+  crosshair.height = "16px";
+  crosshair.thickness = 2;
+  crosshair.color = "#ffd54f";
+  crosshair.background = "rgba(0,0,0,0.15)";
+  crosshair.cornerRadius = 3;
+  crosshair.horizontalAlignment = Rectangle.HORIZONTAL_ALIGNMENT_CENTER;
+  crosshair.verticalAlignment = Rectangle.VERTICAL_ALIGNMENT_CENTER;
+  ui.addControl(crosshair);
   const panel = new StackPanel();
   panel.isVertical = false;
   panel.height = "80px";
